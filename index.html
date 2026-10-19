@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voxus - Voice & Community Hub</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --bg-primary: #313338;
+      --bg-secondary: #2b2d31;
+      --bg-tertiary: #1e1f22;
+      --bg-accent: #111214;
+      --brand: #5865f2;
+      --online: #23a55a;
+      --dnd: #f23f43;
+      --text: #dbdee1;
+      --text-muted: #949ba4;
+      --header: #f2f5f7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; user-select: none; }
+    body { background-color: var(--bg-tertiary); color: var(--text); height: 100vh; overflow: hidden; }
+
+    .app { display: flex; height: 100vh; width: 100vw; }
+    .servers { width: 72px; background: var(--bg-tertiary); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 8px; }
+    .server-icon { width: 48px; height: 48px; background: var(--bg-primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .server-icon.active { border-radius: 16px; background: var(--brand); color: white; }
+
+    .channels { width: 240px; background: var(--bg-secondary); display: flex; flex-direction: column; }
+    .server-title { height: 48px; padding: 0 16px; display: flex; align-items: center; font-weight: bold; color: var(--header); border-bottom: 1px solid rgba(0,0,0,0.2); letter-spacing: 0.5px; }
+    .channel-list { flex: 1; padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+    .channel-item { padding: 6px 8px; border-radius: 4px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .channel-item.active { background: rgba(255,255,255,0.07); color: var(--header); }
+
+    .voice-bar { background: var(--bg-accent); padding: 8px; display: none; flex-direction: column; gap: 6px; }
+    .voice-bar.active { display: flex; }
+    .voice-info { color: var(--online); font-size: 12px; font-weight: bold; display: flex; justify-content: space-between; }
+    .voice-actions { display: flex; gap: 4px; }
+    .btn-action { flex: 1; padding: 6px; background: var(--bg-secondary); border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-action:hover { background: var(--brand); }
+
+    .user-footer { height: 52px; background: var(--bg-accent); padding: 0 8px; display: flex; align-items: center; justify-content: space-between; }
+    .user-info { display: flex; align-items: center; gap: 8px; }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; }
+
+    .chat { flex: 1; background: var(--bg-primary); display: flex; flex-direction: column; }
+    .chat-header { height: 48px; padding: 0 16px; border-bottom: 1px solid rgba(0,0,0,0.2); display: flex; align-items: center; font-weight: bold; color: var(--header); }
+    
+    .video-grid { flex: 1; background: #000; display: none; padding: 16px; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: center; justify-content: center; }
+    .video-grid.active { display: grid; }
+    .video-card { background: var(--bg-secondary); border-radius: 8px; overflow: hidden; aspect-ratio: 16/9; position: relative; }
+    .video-card video { width: 100%; height: 100%; object-fit: cover; }
+    .video-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+
+    .messages { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .msg { display: flex; gap: 12px; }
+    .msg-content { display: flex; flex-direction: column; }
+    .msg-author { font-weight: bold; color: var(--header); font-size: 14px; }
+    .msg-text { color: var(--text); margin-top: 2px; }
+
+    .input-area { padding: 0 16px 20px 16px; }
+    .input-box { background: var(--bg-secondary); padding: 10px 16px; border-radius: 8px; }
+    .input-box input { background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 15px; }
+
+    .members { width: 200px; background: var(--bg-secondary); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .member-title { font-size: 12px; font-weight: bold; color: var(--text-muted); text-transform: uppercase; }
+    .member-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; color: var(--online); }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <div class="servers">
+    <div class="server-icon active" title="Voxus Official Hub">VX</div>
+  </div>
+
+  <div class="channels">
+    <div class="server-title">⚡ Voxus Central</div>
+    <div class="channel-list">
+      <div style="font-size:12px; font-weight:bold; color:var(--text-muted); margin-top:8px;">TEXT CHANNELS</div>
+      <div class="channel-item active"># general-chat</div>
+
+      <div style="font-size:12px; font-weight:bold; color:var(--text-muted); margin-top:16px;">VOICE CHANNELS</div>
+      <div class="channel-item" onclick="joinVoiceChannel()">🔊 Lounge Voice</div>
+    </div>
+
+    <div class="voice-bar" id="voice-bar">
+      <div class="voice-info">
+        <span>🟢 Connected to Voxus</span>
+        <span style="cursor:pointer" onclick="leaveVoiceChannel()">❌</span>
+      </div>
+      <div class="voice-actions">
+        <button class="btn-action" onclick="startScreenShare()">📺 Share Screen</button>
+      </div>
+    </div>
+
+    <div class="user-footer">
+      <div class="user-info">
+        <div class="avatar" id="my-avatar">?</div>
+        <span id="my-name" style="font-weight:bold; font-size:14px;">Connecting...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="chat">
+    <div class="chat-header"># general-chat</div>
+    <div class="video-grid" id="video-grid"></div>
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <div class="input-box">
+        <input type="text" id="chat-input" placeholder="Message #general-chat on Voxus..." onkeydown="handleChat(event)">
+      </div>
+    </div>
+  </div>
+
+  <div class="members">
+    <div class="member-title">Online Members</div>
+    <div id="members-list"></div>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  let username = prompt('Welcome to Voxus! Enter your username:') || 'User_' + Math.floor(Math.random()*1000);
+  document.getElementById('my-name').innerText = username;
+  document.getElementById('my-avatar').innerText = username[0].toUpperCase();
+
+  let screenStream = null;
+
+  function handleChat(e) {
+    if (e.key === 'Enter') {
+      const text = e.target.value.trim();
+      if (!text) return;
+      socket.emit('send-message', { author: username, text });
+      e.target.value = '';
+    }
+  }
+
+  socket.on('receive-message', (data) => {
+    const msgBox = document.getElementById('messages');
+    msgBox.innerHTML += `
+      <div class="msg">
+        <div class="avatar">${data.author[0]}</div>
+        <div class="msg-content">
+          <div class="msg-author">${data.author}</div>
+          <div class="msg-text">${data.text}</div>
+        </div>
+      </div>
+    `;
+    msgBox.scrollTop = msgBox.scrollHeight;
+  });
+
+  async function joinVoiceChannel() {
+    document.getElementById('voice-bar').classList.add('active');
+    document.getElementById('video-grid').classList.add('active');
+    socket.emit('join-voice', { channelId: 'voxus-lounge', username });
+  }
+
+  function leaveVoiceChannel() {
+    document.getElementById('voice-bar').classList.remove('active');
+    document.getElementById('video-grid').classList.remove('active');
+    document.getElementById('video-grid').innerHTML = '';
+    if (screenStream) screenStream.getTracks().forEach(t => t.stop());
+    socket.emit('leave-voice', { channelId: 'voxus-lounge' });
+  }
+
+  async function startScreenShare() {
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const grid = document.getElementById('video-grid');
+      const card = document.createElement('div');
+      card.className = 'video-card';
+      card.innerHTML = `<video id="my-screen" autoplay playsinline muted></video><div class="video-label">${username} (Screen)</div>`;
+      grid.appendChild(card);
+      document.getElementById('my-screen').srcObject = screenStream;
+
+      screenStream.getVideoTracks()[0].onended = () => { card.remove(); };
+    } catch (err) {
+      alert("Screen share could not be started.");
+    }
+  }
+
+  socket.on('update-voice-users', (users) => {
+    const memberList = document.getElementById('members-list');
+    memberList.innerHTML = users.map(u => `<div class="member-item">🟢 ${u.name}</div>`).join('');
+  });
+</script>
+</body>
+</html>
